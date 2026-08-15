@@ -11,8 +11,6 @@ Esta carpeta contiene la versión final del paquete ROS 2 utilizado para los cua
 - `panter_wheel_velocity_controller.py`: controlador proporcional de velocidad por rueda.
 - `traction_curve.py`: curva fuerza de tracción--velocidad y cálculo del límite de par por rueda.
 
-Los mappers básicos utilizados durante etapas anteriores del desarrollo no forman parte de la arquitectura final publicada en este repositorio.
-
 ## Instalación en el workspace
 
 Copiar la carpeta `panter_control` dentro de `src`:
