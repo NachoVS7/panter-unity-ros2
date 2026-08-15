@@ -1,34 +1,66 @@
 # ROS 2 — paquete `panter_control`
 
-Esta carpeta contendrá la versión final del paquete ROS 2 utilizado en los ensayos del TFM.
+Esta carpeta contiene la versión final del paquete ROS 2 utilizado para los cuatro modos de control analizados en el TFM.
 
-## Nodos principales
+## Archivos principales
 
-- `panter_ackermann_mapper.py`: control Ackermann directo por par.
-- `panter_skid_mapper.py`: control tipo *skid-steering* directo por par.
-- `panter_ackermann_velocity_mapper.py`: generación de referencias de velocidad por rueda para Ackermann.
-- `panter_skid_velocity_mapper.py`: generación de referencias de velocidad por lado para *skid-steering*.
+- `panter_ackermann_mapper.py`: Ackermann directo por par.
+- `panter_skid_mapper.py`: *skid-steering* directo por par.
+- `panter_ackermann_velocity_mapper.py`: generación de referencias individuales de velocidad y dirección Ackermann.
+- `panter_skid_velocity_mapper.py`: generación de referencias de velocidad por lado.
 - `panter_wheel_velocity_controller.py`: controlador proporcional de velocidad por rueda.
-- `traction_curve.py`: curva fuerza de tracción--velocidad y cálculo del par máximo disponible por rueda.
+- `traction_curve.py`: curva fuerza de tracción--velocidad y cálculo del límite de par por rueda.
 
-## Compilación
+Los mappers básicos utilizados durante etapas anteriores del desarrollo no forman parte de la arquitectura final publicada en este repositorio.
 
-Una vez situado `panter_control` dentro de un workspace ROS 2:
+## Instalación en el workspace
+
+Copiar la carpeta `panter_control` dentro de `src`:
 
 ```bash
+~/ros2_unity_ws/src/panter_control
+```
+
+Compilar:
+
+```bash
+source /opt/ros/humble/setup.bash
 cd ~/ros2_unity_ws
-colcon build --packages-select panter_control
+colcon build --symlink-install --packages-select panter_control
 source install/setup.bash
 ```
 
-## Puesta en marcha básica
+Comprobar los ejecutables:
 
-En una terminal debe ejecutarse ROS-TCP-Endpoint para establecer la comunicación con Unity. En terminales independientes pueden lanzarse el nodo de control correspondiente y `teleop_twist_keyboard`.
+```bash
+ros2 pkg executables panter_control
+```
+
+## Ejecutables finales
+
+```text
+panter_ackermann_mapper
+panter_skid_mapper
+panter_ackermann_velocity_mapper
+panter_skid_velocity_mapper
+panter_wheel_velocity_controller
+```
+
+## Modos
 
 ### Ackermann directo por par
 
 ```bash
 ros2 run panter_control panter_ackermann_mapper
+```
+
+Parámetros por defecto:
+
+```text
+max_linear_speed      = 2.0 m/s
+max_angular_speed     = 1.0 rad/s
+wheel_radius          = 0.3302 m
+powered_wheel_count   = 4
 ```
 
 ### Skid-steering directo por par
@@ -37,48 +69,108 @@ ros2 run panter_control panter_ackermann_mapper
 ros2 run panter_control panter_skid_mapper
 ```
 
-### Ackermann con control de velocidad por rueda
+Parámetros por defecto:
 
-Terminal 1:
+```text
+max_linear_speed      = 2.0 m/s
+max_angular_speed     = 1.0 rad/s
+wheel_radius          = 0.3302 m
+powered_wheel_count   = 4
+```
+
+### Ackermann por velocidad
+
+Terminal del mapper:
 
 ```bash
 ros2 run panter_control panter_ackermann_velocity_mapper
 ```
 
-Terminal 2:
+Terminal del controlador:
 
 ```bash
 ros2 run panter_control panter_wheel_velocity_controller
 ```
 
-### Skid-steering con control de velocidad por rueda
+Parámetros por defecto del mapper:
 
-Terminal 1:
+```text
+wheel_radius             = 0.3302 m
+track_width              = 1.40 m
+wheel_base               = 2.20 m
+max_linear_speed         = 30.0 m/s
+max_angular_speed        = 1.5 rad/s
+max_steering_angle_deg   = 35 deg
+min_turning_radius       = 2.0 m
+```
+
+### Skid-steering por velocidad
+
+Terminal del mapper:
 
 ```bash
 ros2 run panter_control panter_skid_velocity_mapper
 ```
 
-Terminal 2:
+Terminal del controlador:
 
 ```bash
 ros2 run panter_control panter_wheel_velocity_controller
 ```
 
-### Teleoperación
+Parámetros por defecto del mapper:
 
-```bash
-ros2 run teleop_twist_keyboard teleop_twist_keyboard
+```text
+wheel_radius        = 0.3302 m
+track_width         = 1.40 m
+max_linear_speed    = 20.0 m/s
+max_angular_speed   = 10.0 rad/s
 ```
 
-## Parámetros empleados en la versión del TFM
+## Controlador de velocidad por rueda
 
-Entre los parámetros comunes utilizados en los modelos se encuentran:
+Parámetros por defecto:
 
-- radio de rueda: `0.3302 m`;
-- ancho de vía: `1.336 m`;
-- batalla: `2.3054 m`;
-- ganancia proporcional del controlador de velocidad: `Kp = 80`;
-- velocidad lineal máxima del controlador por velocidad: `20 m/s`.
+```text
+kp                    = 80.0
+max_torque_safety     = 1500 Nm
+command_timeout       = 0.5 s
+wheel_radius          = 0.3302 m
+powered_wheel_count   = 4
+```
 
-El código fuente final se incorporará en esta carpeta antes de fijar la versión de entrega del repositorio.
+El bucle se ejecuta cada `0.02 s`, equivalente a aproximadamente `50 Hz`.
+
+## Curva de tracción
+
+`traction_curve.py` interpola la fuerza disponible en función de la velocidad estimada del vehículo y calcula:
+
+```text
+Tmax = Ftraccion * wheel_radius / powered_wheel_count
+```
+
+El controlador de velocidad utiliza el menor valor entre el límite obtenido de esta curva y `max_torque_safety`.
+
+## Tópicos
+
+Entrada común:
+
+```text
+/cmd_vel
+```
+
+Tópicos de actuación:
+
+```text
+/panter/steering_cmd
+/panter/wheel_torque_cmd
+```
+
+Tópicos internos del lazo de velocidad:
+
+```text
+/panter/wheel_velocity_cmd
+/panter/wheel_states
+```
+
+La descripción completa y la configuración de Unity se encuentran en [`../docs/GUIA_EJECUCION.md`](../docs/GUIA_EJECUCION.md).
