@@ -2,7 +2,9 @@
 
 Esta carpeta contiene los scripts propios distribuibles utilizados para integrar el modelo del Panter con ROS 2.
 
-## Función de Unity
+## Entorno
+
+La versión final del proyecto se desarrolló con Unity 2022.3 LTS.
 
 Unity se encarga de:
 
@@ -25,8 +27,6 @@ En `Scripts/` se incluyen actualmente:
 - `AutoSetVehicleCenterOfMass.cs`;
 - `AutoFitBodyCollider.cs`.
 
-Los scripts auxiliares adicionales se incorporarán únicamente si forman parte de la configuración final y pueden distribuirse.
-
 ## Orden de las ruedas
 
 Todos los mensajes de cuatro valores siguen:
@@ -34,6 +34,11 @@ Todos los mensajes de cuatro valores siguen:
 ```text
 [FL, FR, RL, RR]
 ```
+
+- `FL`: delantera izquierda.
+- `FR`: delantera derecha.
+- `RL`: trasera izquierda.
+- `RR`: trasera derecha.
 
 ## Modos basados en velocidad
 
@@ -45,14 +50,16 @@ Todos los mensajes de cuatro valores siguen:
 
 - ruedas delanteras con dirección activada;
 - `SteeringCommandSubscriber` activado;
-- `WheelTorqueCommandSubscriber` activado.
+- `WheelTorqueCommandSubscriber` activado;
+- `WheelStatePublisher` activado.
 
 ### Skid-steering
 
 - ruedas delanteras alineadas con el chasis;
 - dirección desactivada;
 - `SteeringCommandSubscriber` desactivado;
-- `WheelTorqueCommandSubscriber` activado.
+- `WheelTorqueCommandSubscriber` activado;
+- `WheelStatePublisher` activado.
 
 ## Fricción utilizada en skid-steering
 
@@ -71,6 +78,18 @@ Load Rating = 1.0
 Grip        = 0.6
 Load Rating = 1.1
 ```
+
+## Publicación de cargas verticales
+
+`WheelLoadPublisher.cs` publica:
+
+```text
+/panter/wheel_loads
+/panter/wheel_masses_equivalent
+/panter/wheel_load_distribution
+```
+
+El primer tópico contiene las cargas verticales en N. El segundo transforma cada carga en una masa equivalente mediante `F/9.81`, y el tercero publica la fracción de carga soportada por cada rueda.
 
 ## Dependencias externas
 
@@ -107,8 +126,10 @@ Masa total configurada del vehículo: `866 kg`.
 
 ## Modelo y escena
 
-El `.unitypackage` utilizado durante el desarrollo incluye también Wheel Controller 3D y otros recursos externos, por lo que no se puede publicar directamente tal como fue exportado. Antes de incorporar una escena, prefab o modelo 3D se debe preparar una versión que no redistribuya contenido comercial y confirmar que el modelo geométrico del Panter puede hacerse público.
+El `.unitypackage` utilizado durante el desarrollo incluye también Wheel Controller 3D y otros recursos externos, por lo que no se publica directamente tal como fue exportado.
+
+Por el momento tampoco se incluyen el CAD, los modelos FBX, prefabs ni la escena completa del Panter. Su publicación queda pendiente de comprobar que pueden distribuirse de forma independiente de los recursos de terceros utilizados durante el desarrollo.
 
 ## Guía de ejecución
 
-La activación de scripts y la configuración de cada modo se describen en [`../docs/GUIA_EJECUCION.md`](../docs/GUIA_EJECUCION.md).
+La activación de scripts, los comandos de ROS 2, el funcionamiento sin daemon y la configuración de cada modo se describen en [`../docs/GUIA_EJECUCION.md`](../docs/GUIA_EJECUCION.md).
