@@ -1,6 +1,6 @@
 # Unity — simulación del Panter
 
-Esta carpeta contendrá los scripts propios y los archivos distribuibles necesarios para integrar el Panter con ROS 2.
+Esta carpeta contiene los scripts propios distribuibles utilizados para integrar el modelo del Panter con ROS 2.
 
 ## Función de Unity
 
@@ -12,25 +12,64 @@ Unity se encarga de:
 - obtener las cargas verticales de cada rueda;
 - publicar odometría e información inercial simulada.
 
-## Scripts principales
+## Scripts incluidos
 
-Los scripts empleados en la versión final incluyen, entre otros:
+En `Scripts/` se incluyen actualmente:
 
 - `WheelTorqueCommandSubscriber.cs`;
 - `SteeringCommandSubscriber.cs`;
 - `WheelStatePublisher.cs`;
 - `WheelLoadPublisher.cs`;
-- scripts de publicación de odometría e IMU;
-- scripts auxiliares de configuración del vehículo.
+- `OdometryPublisher.cs`;
+- `IMUPublisher1.cs`;
+- `AutoSetVehicleCenterOfMass.cs`;
+- `AutoFitBodyCollider.cs`.
 
-En los modos de velocidad por rueda, `/panter/wheel_velocity_cmd` permanece dentro de ROS 2. Unity recibe el resultado final del controlador mediante `/panter/wheel_torque_cmd`.
+Los scripts auxiliares adicionales se incorporarán únicamente si forman parte de la configuración final y pueden distribuirse.
 
 ## Orden de las ruedas
 
-Los vectores de cuatro valores siguen siempre el orden:
+Todos los mensajes de cuatro valores siguen:
 
 ```text
 [FL, FR, RL, RR]
+```
+
+## Modos basados en velocidad
+
+`/panter/wheel_velocity_cmd` no se aplica directamente en Unity. Este tópico permanece dentro de ROS 2 y se utiliza como referencia del controlador cerrado. El resultado del controlador llega a Unity mediante `/panter/wheel_torque_cmd`.
+
+## Configuración de dirección
+
+### Ackermann
+
+- ruedas delanteras con dirección activada;
+- `SteeringCommandSubscriber` activado;
+- `WheelTorqueCommandSubscriber` activado.
+
+### Skid-steering
+
+- ruedas delanteras alineadas con el chasis;
+- dirección desactivada;
+- `SteeringCommandSubscriber` desactivado;
+- `WheelTorqueCommandSubscriber` activado.
+
+## Fricción utilizada en skid-steering
+
+La configuración de fricción lateral se modificó para permitir el deslizamiento necesario durante el giro.
+
+### Directo por par
+
+```text
+Grip        = 0.4
+Load Rating = 1.0
+```
+
+### Control de velocidad por rueda
+
+```text
+Grip        = 0.6
+Load Rating = 1.1
 ```
 
 ## Dependencias externas
@@ -42,9 +81,18 @@ El proyecto necesita:
 
 Wheel Controller 3D no se redistribuye en este repositorio. Consulta [`../docs/dependencies.md`](../docs/dependencies.md).
 
-## Configuración física de referencia
+## Adaptación del CarController
 
-Parámetros principales utilizados en el modelo final:
+El proyecto utiliza una versión adaptada del `CarController` suministrado con Wheel Controller 3D para aceptar entradas externas de dirección y par individual por rueda. Al tratarse de código perteneciente a una dependencia comercial, ese archivo no se redistribuye en este repositorio.
+
+La integración requiere que el controlador permita, como mínimo:
+
+- activar/desactivar entrada externa;
+- recibir una entrada externa de dirección;
+- habilitar actuación externa por par;
+- disponer de un valor de par para cada rueda: FL, FR, RL y RR.
+
+## Configuración física de referencia
 
 | Parámetro | Delantero | Trasero |
 |---|---:|---:|
@@ -57,6 +105,10 @@ Parámetros principales utilizados en el modelo final:
 
 Masa total configurada del vehículo: `866 kg`.
 
-## Archivos del modelo
+## Modelo y escena
 
-Antes de publicar la escena, los prefabs o los modelos FBX/CAD se comprobará que puedan distribuirse y que no incluyan contenido perteneciente a Wheel Controller 3D u otras dependencias comerciales.
+El `.unitypackage` utilizado durante el desarrollo incluye también Wheel Controller 3D y otros recursos externos, por lo que no se puede publicar directamente tal como fue exportado. Antes de incorporar una escena, prefab o modelo 3D se debe preparar una versión que no redistribuya contenido comercial y confirmar que el modelo geométrico del Panter puede hacerse público.
+
+## Guía de ejecución
+
+La activación de scripts y la configuración de cada modo se describen en [`../docs/GUIA_EJECUCION.md`](../docs/GUIA_EJECUCION.md).
