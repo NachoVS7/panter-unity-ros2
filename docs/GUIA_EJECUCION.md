@@ -1,16 +1,19 @@
-# Guía de ejecución del simulador Panter
+# Guía de instalación y ejecución del simulador Panter
 
-Esta guía resume la configuración utilizada para ejecutar la versión final del simulador del Panter con Unity y ROS 2 Humble.
+Esta guía recoge la configuración utilizada para ejecutar la versión final del simulador del Panter con Unity y ROS 2.
 
-## 1. Entorno
+## 1. Entorno utilizado
 
-- Ubuntu 22.04 sobre WSL.
+- Windows con WSL.
+- Ubuntu 22.04.
 - ROS 2 Humble.
-- Espacio de trabajo: `~/ros2_unity_ws`.
+- Unity 2022.3 LTS.
+- Espacio de trabajo ROS 2: `~/ros2_unity_ws`.
 - Paquete ROS 2: `panter_control`.
 - Comunicación Unity--ROS 2 mediante ROS-TCP-Connector y ROS-TCP-Endpoint.
+- Simulación de las ruedas mediante Wheel Controller 3D.
 
-Orden de las ruedas en todos los vectores:
+Orden de las ruedas en todos los vectores de cuatro elementos:
 
 ```text
 [FL, FR, RL, RR]
@@ -21,14 +24,33 @@ Orden de las ruedas en todos los vectores:
 - `RL`: trasera izquierda.
 - `RR`: trasera derecha.
 
-## 2. Preparación del espacio de trabajo
+## 2. Instalación del paquete ROS 2
 
-En una terminal de WSL:
+Clonar el repositorio en una ubicación temporal o descargarlo desde GitHub. El paquete que debe copiarse al espacio de trabajo es:
+
+```text
+ros2/panter_control
+```
+
+Ejemplo de estructura final:
+
+```text
+~/ros2_unity_ws/
+└── src/
+    └── panter_control/
+        ├── package.xml
+        ├── setup.py
+        ├── setup.cfg
+        ├── resource/
+        └── panter_control/
+```
+
+Compilar el paquete:
 
 ```bash
 source /opt/ros/humble/setup.bash
 cd ~/ros2_unity_ws
-colcon build --symlink-install
+colcon build --symlink-install --packages-select panter_control
 source install/setup.bash
 ```
 
@@ -38,7 +60,7 @@ Para comprobar que los ejecutables finales están instalados:
 ros2 pkg executables panter_control
 ```
 
-Los ejecutables utilizados en la versión final son:
+Los ejecutables utilizados en la arquitectura final son:
 
 ```text
 panter_ackermann_mapper
@@ -50,7 +72,7 @@ panter_wheel_velocity_controller
 
 ## 3. ROS-TCP-Endpoint
 
-Mantener una terminal dedicada al endpoint:
+Mantener una terminal dedicada al endpoint durante toda la simulación:
 
 ```bash
 source /opt/ros/humble/setup.bash
@@ -64,20 +86,30 @@ Para consultar la dirección IPv4 de WSL:
 hostname -I
 ```
 
-En Unity, configurar `ROSConnection` con la dirección de WSL y el mismo puerto utilizado por ROS-TCP-Endpoint.
+En Unity, configurar `ROSConnection` con la dirección IPv4 de WSL y el mismo puerto utilizado por ROS-TCP-Endpoint.
 
-## 4. Consultas ROS 2 sin daemon
+## 4. Uso de ROS 2 sin depender del daemon
 
-En el entorno utilizado durante el desarrollo se evitó depender del daemon de ROS 2 para las consultas del grafo. Cuando sea necesario listar nodos o tópicos, se recomienda utilizar:
+Durante el desarrollo se produjeron problemas de descubrimiento asociados al daemon de ROS 2. Por este motivo, para las consultas del grafo se utilizó el modo directo siempre que el comando lo permite.
+
+No es necesario ejecutar `ros2 daemon start` para utilizar el simulador.
+
+Si existe un daemon anterior y se quiere detener:
+
+```bash
+ros2 daemon stop
+```
+
+Para listar tópicos y nodos sin utilizar el daemon:
 
 ```bash
 ros2 topic list --no-daemon
 ros2 node list --no-daemon
 ```
 
-Para consultar información detallada de un tópico puede utilizarse igualmente la opción `--no-daemon` cuando esté disponible en el verbo empleado.
+Los comandos que crean directamente sus propios nodos, suscripciones o publicadores, como `ros2 run`, `ros2 topic echo`, `ros2 topic pub` y `ros2 topic hz`, pueden utilizarse normalmente sin iniciar manualmente el daemon.
 
-Los comandos que crean sus propias suscripciones o publicadores, como `ros2 topic echo`, `ros2 topic pub`, `ros2 topic hz` o `ros2 run`, no necesitan el daemon para realizar su función principal.
+No debe añadirse `--no-daemon` a comandos que no admitan dicha opción.
 
 ## 5. Configuración común en Unity
 
@@ -90,18 +122,21 @@ En los cuatro modos finales:
 - `WheelVelocityCommandSubscriber`: desactivado.
 - `CmdVelCarController`: desactivado.
 
-`/panter/wheel_velocity_cmd` se utiliza como referencia interna en ROS 2. La velocidad objetivo no se impone directamente en Unity. La actuación final se realiza mediante `/panter/wheel_torque_cmd` y, en Ackermann, también mediante `/panter/steering_cmd`.
+`/panter/wheel_velocity_cmd` se utiliza como referencia interna en ROS 2. La velocidad objetivo no se impone directamente en Unity. La actuación final llega a Unity mediante `/panter/wheel_torque_cmd` y, en las variantes Ackermann, también mediante `/panter/steering_cmd`.
+
+Los scripts propios necesarios se encuentran en `unity/Scripts`. El código de Wheel Controller 3D no se redistribuye en este repositorio.
 
 ## 6. Ackermann directo por par
 
-### Unity
+### Configuración en Unity
 
 - Dirección delantera: activada.
 - `SteeringCommandSubscriber`: activado.
 - `WheelTorqueCommandSubscriber`: activado.
+- `WheelStatePublisher`: activado.
 - Configuración normal de fricción de las ruedas.
 
-### ROS 2
+### Nodo ROS 2
 
 ```bash
 source /opt/ros/humble/setup.bash
@@ -116,7 +151,9 @@ El nodo recibe `/cmd_vel` y publica:
 /panter/wheel_torque_cmd
 ```
 
-Parámetros por defecto del nodo:
+Además, recibe `/panter/wheel_states` para estimar la velocidad del vehículo utilizada por la limitación de tracción.
+
+Parámetros por defecto:
 
 ```text
 max_linear_speed      = 2.0 m/s
@@ -127,23 +164,24 @@ powered_wheel_count   = 4
 
 ## 7. Skid-steering directo por par
 
-### Unity
+### Configuración en Unity
 
 - Dirección delantera: desactivada.
 - Ruedas delanteras alineadas con el chasis.
 - `SteeringCommandSubscriber`: desactivado.
 - `WheelTorqueCommandSubscriber`: activado.
+- `WheelStatePublisher`: activado.
 
-Para las pruebas finales de este modo se modificaron los parámetros de fricción lateral de las ruedas a:
+Para las pruebas finales de este modo se utilizaron los siguientes parámetros de fricción lateral:
 
 ```text
 Grip        = 0.4
 Load Rating = 1.0
 ```
 
-Esta modificación facilita el deslizamiento lateral necesario para producir el giro mediante diferencias de par entre los lados.
+Esta configuración reduce la resistencia al deslizamiento lateral necesario para producir el giro mediante diferencias de actuación entre los lados izquierdo y derecho.
 
-### ROS 2
+### Nodo ROS 2
 
 ```bash
 source /opt/ros/humble/setup.bash
@@ -151,7 +189,7 @@ source ~/ros2_unity_ws/install/setup.bash
 ros2 run panter_control panter_skid_mapper
 ```
 
-El nodo recibe `/cmd_vel` y publica `/panter/wheel_torque_cmd`.
+El nodo recibe `/cmd_vel` y `/panter/wheel_states`, y publica `/panter/wheel_torque_cmd`.
 
 Parámetros por defecto:
 
@@ -166,7 +204,7 @@ powered_wheel_count   = 4
 
 Este modo utiliza dos nodos ROS 2.
 
-### Terminal del mapper
+### Terminal 1: generador de referencias Ackermann
 
 ```bash
 source /opt/ros/humble/setup.bash
@@ -174,7 +212,7 @@ source ~/ros2_unity_ws/install/setup.bash
 ros2 run panter_control panter_ackermann_velocity_mapper
 ```
 
-Parámetros por defecto del mapper:
+Parámetros por defecto del nodo:
 
 ```text
 wheel_radius             = 0.3302 m
@@ -186,7 +224,9 @@ max_steering_angle_deg   = 35 deg
 min_turning_radius       = 2.0 m
 ```
 
-### Terminal del controlador
+Estos son los valores conservados en el nodo utilizado durante las pruebas. No deben confundirse con las dimensiones geométricas de referencia del modelo físico de Unity.
+
+### Terminal 2: controlador de velocidad por rueda
 
 ```bash
 source /opt/ros/humble/setup.bash
@@ -194,7 +234,7 @@ source ~/ros2_unity_ws/install/setup.bash
 ros2 run panter_control panter_wheel_velocity_controller
 ```
 
-Parámetros por defecto del controlador:
+Parámetros por defecto:
 
 ```text
 kp                    = 80.0
@@ -202,16 +242,17 @@ max_torque_safety     = 1500 Nm
 command_timeout       = 0.5 s
 wheel_radius          = 0.3302 m
 powered_wheel_count   = 4
-control period        = 0.02 s (50 Hz)
+control_period        = 0.02 s (50 Hz)
 ```
 
-### Unity
+### Configuración en Unity
 
 - Dirección delantera: activada.
 - `SteeringCommandSubscriber`: activado.
 - `WheelTorqueCommandSubscriber`: activado.
 - `WheelStatePublisher`: activado.
 - `WheelVelocityCommandSubscriber`: desactivado.
+- Configuración normal de fricción.
 
 Flujo principal:
 
@@ -228,22 +269,23 @@ La dirección se publica en paralelo mediante `/panter/steering_cmd`.
 
 ## 9. Skid-steering con controlador de velocidad por rueda
 
-### Unity
+### Configuración en Unity
 
 - Dirección delantera: desactivada.
-- Ruedas delanteras alineadas.
+- Ruedas delanteras alineadas con el chasis.
 - `SteeringCommandSubscriber`: desactivado.
 - `WheelTorqueCommandSubscriber`: activado.
 - `WheelStatePublisher`: activado.
+- `WheelVelocityCommandSubscriber`: desactivado.
 
-En los ensayos finales de esta variante se utilizaron los siguientes valores de fricción lateral:
+En los ensayos finales de esta variante se utilizaron:
 
 ```text
 Grip        = 0.6
 Load Rating = 1.1
 ```
 
-### Terminal del mapper
+### Terminal 1: generador de referencias skid-steering
 
 ```bash
 source /opt/ros/humble/setup.bash
@@ -260,13 +302,15 @@ max_linear_speed    = 20.0 m/s
 max_angular_speed   = 10.0 rad/s
 ```
 
-### Terminal del controlador
+### Terminal 2: controlador de velocidad
 
 ```bash
 source /opt/ros/humble/setup.bash
 source ~/ros2_unity_ws/install/setup.bash
 ros2 run panter_control panter_wheel_velocity_controller
 ```
+
+El controlador utilizado es el mismo que en la variante Ackermann por velocidad.
 
 ## 10. Teleoperación
 
@@ -278,18 +322,20 @@ source ~/ros2_unity_ws/install/setup.bash
 ros2 run teleop_twist_keyboard teleop_twist_keyboard
 ```
 
-El nodo publica en `/cmd_vel`, por lo que puede utilizarse con cualquiera de los cuatro modos anteriores siempre que el mapper correspondiente esté activo.
+El nodo publica en `/cmd_vel`, por lo que puede utilizarse con cualquiera de los cuatro modos siempre que esté activo el nodo de conversión correspondiente.
+
+Antes de teleoperar debe comprobarse que solo existe un nodo publicando las órdenes correspondientes al modo seleccionado.
 
 ## 11. Publicación manual de consignas
 
-Ejemplo de avance recto:
+Avance recto:
 
 ```bash
 ros2 topic pub -r 20 /cmd_vel geometry_msgs/msg/Twist \
 "{linear: {x: 1.0}, angular: {z: 0.0}}"
 ```
 
-Ejemplo de giro:
+Giro con avance:
 
 ```bash
 ros2 topic pub -r 20 /cmd_vel geometry_msgs/msg/Twist \
@@ -303,9 +349,9 @@ ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist \
 "{linear: {x: 0.0}, angular: {z: 0.0}}"
 ```
 
-Estos comandos son ejemplos reproducibles de comprobación y no deben interpretarse necesariamente como las consignas exactas de todos los registros incluidos en la memoria.
+Estos comandos proporcionan pruebas reproducibles. Las consignas concretas utilizadas en cada figura o ensayo deben consultarse en la memoria y en los datos asociados al ensayo correspondiente.
 
-## 12. Monitorización
+## 12. Monitorización de tópicos
 
 Listar tópicos sin daemon:
 
@@ -313,7 +359,13 @@ Listar tópicos sin daemon:
 ros2 topic list --no-daemon
 ```
 
-Mostrar variables principales:
+Listar nodos sin daemon:
+
+```bash
+ros2 node list --no-daemon
+```
+
+Mostrar las principales señales de control:
 
 ```bash
 ros2 topic echo /cmd_vel
@@ -321,8 +373,27 @@ ros2 topic echo /panter/wheel_states
 ros2 topic echo /panter/wheel_torque_cmd
 ros2 topic echo /panter/wheel_velocity_cmd
 ros2 topic echo /panter/steering_cmd
+```
+
+Mostrar las cargas publicadas desde Unity:
+
+```bash
 ros2 topic echo /panter/wheel_loads
+ros2 topic echo /panter/wheel_masses_equivalent
+ros2 topic echo /panter/wheel_load_distribution
+```
+
+Los tres tópicos anteriores contienen, respectivamente:
+
+- carga vertical de cada rueda en N;
+- masa equivalente de cada carga, calculada como `F/g`, en kg;
+- fracción de la carga total soportada por cada rueda.
+
+Mostrar información de movimiento:
+
+```bash
 ros2 topic echo /fixposition/odometry
+ros2 topic echo /fixposition/imu
 ```
 
 Comprobar frecuencias:
@@ -336,7 +407,7 @@ ros2 topic hz /fixposition/imu
 
 ## 13. Registro con rosbag
 
-Ejemplo de registro de las variables principales:
+Ejemplo de registro general:
 
 ```bash
 ros2 bag record -o panter_test \
@@ -346,17 +417,21 @@ ros2 bag record -o panter_test \
 /panter/wheel_velocity_cmd \
 /panter/steering_cmd \
 /panter/wheel_loads \
+/panter/wheel_masses_equivalent \
+/panter/wheel_load_distribution \
 /fixposition/odometry \
 /fixposition/imu
 ```
 
 Los tópicos que no estén activos en el modo seleccionado pueden omitirse.
 
+Para comparar ensayos es recomendable utilizar nombres de carpeta diferentes y mantener las mismas condiciones iniciales del vehículo.
+
 ## 14. Curva de tracción
 
-Los modelos que actúan mediante par utilizan `traction_curve.py` para calcular el límite de par en función de la velocidad estimada del vehículo.
+Los nodos que actúan mediante par utilizan `traction_curve.py` para limitar el par disponible en función de la velocidad estimada del vehículo.
 
-La fuerza total se interpola entre los siguientes puntos:
+La fuerza total se interpola linealmente entre los siguientes puntos:
 
 | Velocidad [km/h] | Fuerza [N] |
 |---:|---:|
@@ -375,29 +450,56 @@ La fuerza total se interpola entre los siguientes puntos:
 | 66 | 5200 |
 | 72 | 4800 |
 
-El par máximo por rueda se calcula como:
+El par máximo por rueda se calcula mediante:
 
 ```text
 Tmax = Ftraccion * wheel_radius / powered_wheel_count
 ```
 
-## 15. Solución de problemas
+Con la configuración actual se utilizan cuatro ruedas motrices y un radio de `0.3302 m`.
+
+## 15. Cambio entre modos
+
+Antes de cambiar de estrategia de control:
+
+1. enviar una consigna nula;
+2. detener con `Ctrl+C` los nodos del modo anterior;
+3. detener la ejecución de Unity;
+4. configurar la dirección delantera;
+5. ajustar la fricción lateral si se cambia a una variante skid-steering;
+6. iniciar los nodos del nuevo modo;
+7. volver a ejecutar la simulación.
+
+Nunca deben ejecutarse simultáneamente dos nodos de conversión que publiquen sobre los mismos tópicos de actuación.
+
+## 16. Solución de problemas
 
 ### No aparecen los tópicos
 
 ```bash
 ros2 topic list --no-daemon
+ros2 node list --no-daemon
 ```
 
-Comprobar que Unity está en Play, que `ROSConnection` está conectado y que ROS-TCP-Endpoint continúa ejecutándose.
+Comprobar que Unity está ejecutándose, que `ROSConnection` está conectado y que ROS-TCP-Endpoint continúa activo.
 
 ### El vehículo no se mueve
 
-Comprobar:
+Comprobar primero la entrada:
 
 ```bash
 ros2 topic echo /cmd_vel
+```
+
+Después comprobar la orden final enviada a Unity:
+
+```bash
 ros2 topic echo /panter/wheel_torque_cmd
+```
+
+Y la realimentación:
+
+```bash
 ros2 topic echo /panter/wheel_states
 ```
 
@@ -407,7 +509,7 @@ En los modos de velocidad comprobar además:
 ros2 topic echo /panter/wheel_velocity_cmd
 ```
 
-### Giro en sentido incorrecto
+### El vehículo gira en sentido contrario
 
 Revisar:
 
@@ -416,19 +518,46 @@ Revisar:
 - signo de las velocidades publicadas por `WheelStatePublisher`;
 - configuración de las ruedas directrices en Unity.
 
-### Vibraciones en reposo
+### Las velocidades reales tienen signo incorrecto
 
-Durante el desarrollo se observó que la estabilidad mejoró al eliminar scripts auxiliares de estabilización que introducían fuerzas adicionales y al aumentar la frecuencia de actualización física de Unity. También deben comprobarse los recorridos de suspensión, la amortiguación y los colliders.
+El signo debe corregirse en la publicación de `WheelStatePublisher` o en la configuración de los ejes de las ruedas. No debe corregirse únicamente durante el tratamiento posterior de los datos.
 
-### Cambio entre modos
+### El Panter vibra en reposo
 
-Antes de cambiar de estrategia:
+Durante el desarrollo se observó una mejora importante al eliminar scripts auxiliares que aplicaban fuerzas adicionales de estabilización y al aumentar la frecuencia de actualización física de Unity. También deben comprobarse los recorridos de suspensión, la amortiguación, la posición de las ruedas y los colliders.
+
+### Problemas de descubrimiento asociados al daemon
+
+Si una consulta del grafo devuelve información incoherente:
+
+```bash
+ros2 daemon stop
+ros2 topic list --no-daemon
+ros2 node list --no-daemon
+```
+
+No es necesario volver a iniciar manualmente el daemon para ejecutar los nodos del simulador.
+
+## 17. Cierre de una prueba
+
+Al terminar un ensayo:
 
 1. enviar una consigna nula;
-2. detener los nodos anteriores con `Ctrl+C`;
-3. detener Play en Unity;
-4. cambiar la configuración de dirección y, cuando corresponda, la fricción lateral;
-5. iniciar los nuevos nodos;
-6. volver a ejecutar la simulación.
+2. detener la teleoperación o publicación manual;
+3. detener `rosbag` si estaba activo;
+4. detener los nodos del modo de control con `Ctrl+C`;
+5. detener Unity;
+6. detener ROS-TCP-Endpoint cuando ya no se vayan a realizar más pruebas.
 
-Nunca deben ejecutarse simultáneamente dos mappers que publiquen sobre los mismos tópicos de actuación.
+Consigna nula:
+
+```bash
+ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist \
+"{linear: {x: 0.0}, angular: {z: 0.0}}"
+```
+
+## 18. Archivos no incluidos
+
+El repositorio no incluye por el momento el modelo CAD/FBX del Panter ni otros recursos tridimensionales cuya distribución todavía no se ha decidido.
+
+Tampoco se redistribuye Wheel Controller 3D. La carpeta `unity/Scripts` contiene únicamente los scripts propios que pueden publicarse de forma independiente de dicha dependencia.
