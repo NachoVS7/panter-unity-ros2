@@ -51,31 +51,62 @@ public class AutoSetVehicleCenterOfMass : MonoBehaviour
     [ContextMenu("Apply Center Of Mass")]
     public void ApplyCenterOfMass()
     {
-        if (targetRigidbody == null || wheelFL == null || wheelFR == null || wheelRL == null || wheelRR == null || chassisBoxCollider == null)
+        if (targetRigidbody == null)
         {
-            Debug.LogWarning("Faltan referencias para calcular el centro de masas.");
+            Debug.LogWarning("Falta asignar el Rigidbody.");
             return;
         }
 
-        Vector3 wheelCenterWorld = (wheelFL.position + wheelFR.position + wheelRL.position + wheelRR.position) / 4f;
+        if (wheelFL == null || wheelFR == null || wheelRL == null || wheelRR == null)
+        {
+            Debug.LogWarning("Falta asignar alguna rueda/WheelController.");
+            return;
+        }
+
+        if (chassisBoxCollider == null)
+        {
+            Debug.LogWarning("Falta asignar el BoxCollider del chasis.");
+            return;
+        }
+
+        Vector3 wheelCenterWorld =
+            (wheelFL.position + wheelFR.position + wheelRL.position + wheelRR.position) / 4f;
+
         Bounds chassisBounds = chassisBoxCollider.bounds;
 
-        float comY = Mathf.Lerp(chassisBounds.min.y, chassisBounds.max.y, heightPercentFromBottom);
+        float bottomY = chassisBounds.min.y;
+        float topY = chassisBounds.max.y;
+        float comY = Mathf.Lerp(bottomY, topY, heightPercentFromBottom);
 
-        Vector3 comWorld = new Vector3(wheelCenterWorld.x, comY, wheelCenterWorld.z);
+        Vector3 comWorld = new Vector3(
+            wheelCenterWorld.x,
+            comY,
+            wheelCenterWorld.z
+        );
+
         Vector3 comLocal = targetRigidbody.transform.InverseTransformPoint(comWorld);
 
         targetRigidbody.centerOfMass = comLocal;
 
-        Debug.Log("Center Of Mass aplicado. Local: " + comLocal.ToString("F3") + " | World: " + comWorld.ToString("F3"));
+        Debug.Log(
+            "Center Of Mass aplicado. Local: " + comLocal.ToString("F3") +
+            " | World: " + comWorld.ToString("F3")
+        );
     }
 
     private void OnDrawGizmos()
     {
-        if (!drawGizmo || targetRigidbody == null) return;
+        if (!drawGizmo || targetRigidbody == null)
+            return;
 
         Vector3 comWorld = targetRigidbody.transform.TransformPoint(targetRigidbody.centerOfMass);
+
         Gizmos.color = Color.yellow;
         Gizmos.DrawSphere(comWorld, gizmoSize);
+
+        Gizmos.color = Color.black;
+        Gizmos.DrawLine(comWorld + Vector3.left * gizmoSize * 2f, comWorld + Vector3.right * gizmoSize * 2f);
+        Gizmos.DrawLine(comWorld + Vector3.forward * gizmoSize * 2f, comWorld + Vector3.back * gizmoSize * 2f);
+        Gizmos.DrawLine(comWorld + Vector3.up * gizmoSize * 2f, comWorld + Vector3.down * gizmoSize * 2f);
     }
 }
