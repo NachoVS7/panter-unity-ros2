@@ -13,14 +13,12 @@ El proyecto permite:
 - utilizar estrategias Ackermann y tipo *skid-steering*;
 - cerrar un lazo de control de velocidad de forma individual para cada rueda;
 - publicar velocidades de rueda y cargas verticales;
-- publicar información de odometría e IMU para el análisis de las maniobras.
+- publicar odometría e información inercial para analizar las maniobras.
 
 ## Arquitectura
 
-La arquitectura separa el control de la simulación física:
-
 ```text
-                       ROS 2
+                         ROS 2
 
  /cmd_vel
      |
@@ -46,45 +44,52 @@ La arquitectura separa el control de la simulación física:
                  Panter
 ```
 
-Las referencias de velocidad `/panter/wheel_velocity_cmd` se utilizan internamente en ROS 2 por el controlador de velocidad por rueda. La actuación final enviada a Unity se realiza mediante consignas de dirección y/o par.
+Las referencias `/panter/wheel_velocity_cmd` permanecen dentro de ROS 2 en los modos de velocidad por rueda. Unity recibe la actuación final mediante par y, en Ackermann, mediante una referencia adicional de dirección.
 
-## Modos de control implementados
+## Modos de control
 
 ### Ackermann directo por par
 
-La consigna `/cmd_vel` se transforma en:
+`/cmd_vel` se transforma en:
 
-- `/panter/steering_cmd`: referencia de dirección para las ruedas delanteras;
-- `/panter/wheel_torque_cmd`: consignas de par para las cuatro ruedas motrices.
+- `/panter/steering_cmd`;
+- `/panter/wheel_torque_cmd`.
 
 ### *Skid-steering* directo por par
 
-Las ruedas delanteras permanecen alineadas y el giro se genera mediante diferencias de par entre los lados izquierdo y derecho.
+Las ruedas delanteras permanecen alineadas y el giro se genera mediante una diferencia de par entre los lados izquierdo y derecho.
 
 ### Ackermann con control de velocidad por rueda
 
-El nodo de mapeo genera referencias individuales en `/panter/wheel_velocity_cmd` y una referencia de dirección. El controlador compara las referencias con `/panter/wheel_states` y calcula el par de cada rueda.
+El mapper genera referencias individuales en `/panter/wheel_velocity_cmd` y una referencia de dirección. El controlador compara las referencias con `/panter/wheel_states` y calcula el par de cada rueda.
 
 ### *Skid-steering* con control de velocidad por rueda
 
-Las referencias de velocidad se generan por lados. El controlador de rueda utiliza la misma estructura de realimentación y genera las consignas finales de par.
+El mapper genera una referencia común para las ruedas de cada lado. El mismo controlador de velocidad transforma posteriormente el error de seguimiento en par.
 
-## Estructura prevista del repositorio
+## Estructura
 
 ```text
 panter-unity-ros2/
 ├── README.md
 ├── .gitignore
 ├── docs/
+│   ├── GUIA_EJECUCION.md
 │   ├── dependencies.md
 │   └── topics.md
 ├── ros2/
-│   └── README.md
+│   ├── README.md
+│   └── panter_control/
 └── unity/
-    └── README.md
+    ├── README.md
+    └── Scripts/
 ```
 
-Los directorios `ros2/` y `unity/` contendrán únicamente el código y los archivos que pueden distribuirse como parte del trabajo. Las dependencias de terceros no se incluyen en el repositorio.
+## Guía de instalación y ejecución
+
+La configuración de los cuatro modos, los comandos de terminal, los parámetros de los nodos, la configuración de fricción y los procedimientos de diagnóstico se recogen en:
+
+**[`docs/GUIA_EJECUCION.md`](docs/GUIA_EJECUCION.md)**
 
 ## Dependencias principales
 
@@ -96,7 +101,7 @@ Los directorios `ros2/` y `unity/` contendrán únicamente el código y los arch
 
 Wheel Controller 3D es una dependencia externa distribuida mediante Unity Asset Store y **no se incluye en este repositorio**.
 
-Consulta [`docs/dependencies.md`](docs/dependencies.md) para obtener más información.
+Consulta [`docs/dependencies.md`](docs/dependencies.md).
 
 ## Tópicos principales
 
@@ -111,38 +116,43 @@ Consulta [`docs/dependencies.md`](docs/dependencies.md) para obtener más inform
 | `/fixposition/odometry` | Unity → ROS 2 | Posición y orientación simuladas. |
 | `/fixposition/imu` | Unity → ROS 2 | Información inercial simulada. |
 
-La descripción ampliada se encuentra en [`docs/topics.md`](docs/topics.md).
+La descripción ampliada está en [`docs/topics.md`](docs/topics.md).
 
-## Parámetros principales del modelo
+## Parámetros físicos principales del modelo Unity
 
-Los valores utilizados en la versión del TFM incluyen:
-
-- masa total del vehículo: `866 kg`;
-- radio de rueda: `0.3302 m`;
-- batalla: `2.3054 m`;
-- ancho de vía empleado en los modelos de control: `1.336 m`;
+- masa total: `866 kg`;
+- radio de las ruedas: `0.3302 m`;
+- batalla geométrica del modelo: `2.3054 m`;
+- ancho de vía geométrico de referencia: `1.336 m`;
 - masa de rueda delantera: `22.8 kg`;
 - masa de rueda trasera: `26.5 kg`;
-- recorrido máximo de suspensión delantera: `0.0547 m`;
-- recorrido máximo de suspensión trasera: `0.0340 m`.
+- recorrido máximo delantero: `0.0547 m`;
+- recorrido máximo trasero: `0.0340 m`.
 
-Los parámetros completos y su justificación se describen en la memoria del TFM.
+Los mappers ROS 2 conservan los parámetros con los que se realizaron las pruebas. En particular, `panter_ackermann_velocity_mapper` utiliza por defecto `track_width=1.40 m` y `wheel_base=2.20 m`, mientras que `panter_skid_velocity_mapper` utiliza `track_width=1.40 m`. La guía de ejecución recoge todos los valores usados por los nodos.
+
+## Configuración de fricción para *skid-steering*
+
+En las pruebas finales se emplearon configuraciones específicas de fricción lateral:
+
+- directo por par: `Grip = 0.4`, `Load Rating = 1.0`;
+- control de velocidad: `Grip = 0.6`, `Load Rating = 1.1`.
+
+Estas configuraciones facilitan el deslizamiento lateral necesario para el giro tipo *skid-steering*.
 
 ## Código ROS 2
 
-El paquete principal es `panter_control`. Incluye los mappers Ackermann y *skid-steering*, el controlador de velocidad por rueda y el módulo utilizado para limitar el par disponible mediante la curva de tracción--velocidad.
-
-Las instrucciones de compilación y ejecución se recogerán en [`ros2/README.md`](ros2/README.md) junto con el código correspondiente a la versión final empleada en los ensayos.
+El paquete [`ros2/panter_control`](ros2/panter_control) contiene los cinco ejecutables utilizados en la arquitectura final y el módulo de curva de tracción.
 
 ## Código Unity
 
-Los scripts propios necesarios para la comunicación, actuación y publicación de variables se documentan en [`unity/README.md`](unity/README.md).
+Los scripts propios distribuibles están en [`unity/Scripts`](unity/Scripts). El repositorio no redistribuye el código fuente de Wheel Controller 3D ni otros recursos comerciales.
 
-El repositorio no redistribuye Wheel Controller 3D ni otros recursos de terceros.
+Algunas modificaciones necesarias se aplicaron sobre el `CarController` incluido con Wheel Controller 3D. Debido a que ese archivo pertenece a una dependencia de terceros, no se publica aquí; las adaptaciones necesarias se documentarán como instrucciones de integración.
 
 ## Reproducibilidad
 
-La versión final asociada a la entrega del TFM se fijará mediante una etiqueta del repositorio una vez incorporados y comprobados todos los archivos utilizados en los ensayos.
+Una vez completada la revisión de los archivos de Unity y de la documentación se fijará la versión correspondiente a la entrega mediante una etiqueta del repositorio.
 
 ## Autor
 
